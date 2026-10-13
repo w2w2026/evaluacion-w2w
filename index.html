@@ -415,53 +415,15 @@ function Results({ans,aAns,co,onRestart}) {
     // Save via Apps Script (includes detailed answers)
     try {
       const img = new Image();
-      img.src = "APPS_SCRIPT_URL_GENERAL?ping=1";
-      await fetch("APPS_SCRIPT_URL_GENERAL", {
+      img.src = "https://script.google.com/macros/s/AKfycbxNThO2Xz1zNB2aVshmwHJ8i6sHn9NKbLVhMBs8Q5JfkO7APARoNlu0ECxF83xJwcuV/exec?ping=1";
+      await fetch("https://script.google.com/macros/s/AKfycbxNThO2Xz1zNB2aVshmwHJ8i6sHn9NKbLVhMBs8Q5JfkO7APARoNlu0ECxF83xJwcuV/exec", {
         method:"POST",
         mode:"no-cors",
         headers:{"Content-Type":"application/json"},
         body:JSON.stringify(record)
       });
     } catch(e){ console.error("Apps Script error:",e); }
-    // Also save summary to SheetDB
-    try {
-      const ops = (aiData?.oportunidades)||[];
-      const s = v => typeof v==="string" ? v : String(v||"");
-      const row = {
-        Fecha: record.ts,
-        RazonSocial: s(co.razonSocial),
-        NIT: s(co.nit),
-        Ciudad: s(co.ciudad),
-        Pais: s(co.pais),
-        Empleados: s(co.employees),
-        Sector: s(co.sector),
-        TipoOferta: s(co.tipoOferta),
-        Contacto: s(co.contactName),
-        Cargo: s(co.contactRole),
-        Email: s(co.contactEmail),
-        Telefono: s(co.contactPhone),
-        Score: score,
-        Nivel: lv.name,
-        Diseno: ds.diseno||0,
-        Materiales: ds.materiales||0,
-        Energia: ds.energia||0,
-        Modelos: ds.modelos||0,
-        Cadena: ds.cadena||0,
-        Cultura: ds.cultura||0,
-        Activos: aPct,
-        Interpretacion: s(aiData?.interpretacion),
-        Oportunidad1: typeof ops[0]==="string"?ops[0]:"",
-        Oportunidad2: typeof ops[1]==="string"?ops[1]:"",
-        Oportunidad3: typeof ops[2]==="string"?ops[2]:"",
-        ProximoPaso: s(aiData?.proximoPaso)
-      };
-      const res = await fetch("https://sheetdb.io/api/v1/mlwr2ej8jaopu", {
-        method: "POST",
-        headers: {"Content-Type":"application/json","Accept":"application/json"},
-        body: JSON.stringify({data: row})
-      });
-      console.log("SheetDB status:", res.status);
-    } catch(e){ console.error("SheetDB error:",e); }
+    // Data saved via Apps Script only
     // Save NIT to localStorage to prevent duplicates
     try {
       const stored = localStorage.getItem("w2w_nits_used");
@@ -1033,7 +995,7 @@ function CompanyForm({onNext}) {
 }
 
 // ── MAIN APP ──────────────────────────────────────────────────
-export default function PinScreen({onSuccess}) {
+function PinScreen({onSuccess}) {
   const [pin,setPin]=useState("");
   const [error,setError]=useState(false);
   const CORRECT = "7349";
