@@ -378,6 +378,7 @@ function Results({ans,aAns,co,onRestart}) {
   const [ai,setAi]=useState(null);
   const [showLevel,setShowLevel]=useState(false);
   const [showNext,setShowNext]=useState(false);
+  const [saveStatus,setSaveStatus]=useState("saving");
 
   const ds={};
   DIMS.forEach(d=>{
@@ -412,28 +413,32 @@ function Results({ans,aAns,co,onRestart}) {
       }
     });
     const record = {ts:new Date().toISOString(),co,ds,score,level:lv.name,aPct,ai:aiData||{},answers:answerTexts,assetAnswers:assetTexts};
-    // Save via Apps Script (includes detailed answers)
-    try {
-      const img = new Image();
-      img.src = "https://script.google.com/macros/s/AKfycbxNThO2Xz1zNB2aVshmwHJ8i6sHn9NKbLVhMBs8Q5JfkO7APARoNlu0ECxF83xJwcuV/exec?ping=1";
-      await fetch("https://script.google.com/macros/s/AKfycbxNThO2Xz1zNB2aVshmwHJ8i6sHn9NKbLVhMBs8Q5JfkO7APARoNlu0ECxF83xJwcuV/exec", {
-        method:"POST",
-        mode:"no-cors",
-        headers:{"Content-Type":"application/json"},
-        body:JSON.stringify(record)
-      });
-    } catch(e){ console.error("Apps Script error:",e); }
-    // Data saved via Apps Script only
-    // Save NIT to localStorage to prevent duplicates
-    try {
-      const stored = localStorage.getItem("w2w_nits_used");
-      const nitsUsed = stored ? JSON.parse(stored) : [];
-      const nitClean = (co.nit||"").replace(/\D/g,"");
-      if(nitClean && !nitsUsed.find(n=>n.nit===nitClean)) {
-        nitsUsed.push({nit:nitClean, fecha:new Date().toLocaleDateString("es-CO",{year:"numeric",month:"long",day:"numeric"})});
-        localStorage.setItem("w2w_nits_used", JSON.stringify(nitsUsed));
-      }
-    } catch(e){}
+    // Envío al Apps Script: se lee la confirmación y se reintenta una vez
+    const SCRIPT_URL = "https://script.google.com/macros/s/AKfycbxNThO2Xz1zNB2aVshmwHJ8i6sHn9NKbLVhMBs8Q5JfkO7APARoNlu0ECxF83xJwcuV/exec";
+    const send = async () => {
+      const res = await fetch(SCRIPT_URL, {method:"POST", body:JSON.stringify(record)});
+      const out = await res.json();
+      return !!(out && out.status==="ok");
+    };
+    let saved = false;
+    for(let t=0; t<2 && !saved; t++){
+      try { saved = await send(); } catch(e){ console.error("Apps Script error:",e); }
+      if(!saved && t===0) await new Promise(r=>setTimeout(r,1500));
+    }
+    if(saved){
+      // Solo se marca el NIT como usado si el guardado fue exitoso
+      try {
+        const stored = localStorage.getItem("w2w_nits_used");
+        const nitsUsed = stored ? JSON.parse(stored) : [];
+        const nitClean = (co.nit||"").replace(/\D/g,"");
+        if(nitClean && !nitsUsed.find(n=>n.nit===nitClean)) {
+          nitsUsed.push({nit:nitClean, fecha:new Date().toLocaleDateString("es-CO",{year:"numeric",month:"long",day:"numeric"})});
+          localStorage.setItem("w2w_nits_used", JSON.stringify(nitsUsed));
+        }
+      } catch(e){}
+    }
+    setSaveStatus(saved?"ok":"error");
+    return saved;
   };
 
   useEffect(()=>{
@@ -620,9 +625,29 @@ function Results({ans,aAns,co,onRestart}) {
       <div style={{...css.card,textAlign:"center",background:`linear-gradient(135deg,${P.bg2},${P.bg})`}}>
         <div style={{fontSize:40,marginBottom:8}}>🌱</div>
         <h2 style={{...css.h1,marginBottom:7}}>¡Gracias por participar!</h2>
-        <p style={{fontSize:14,color:P.txt2,maxWidth:460,margin:"0 auto 20px",lineHeight:1.65}}>
-          Tu evaluación ha sido registrada. Si tu institución es seleccionada para el piloto <em>Inteligencia Circular en el Sector Salud</em>, nos estaremos comunicando contigo antes del 4 de noviembre.
-        </p>
+        {saveStatus==="saving"&&(
+          <p style={{fontSize:14,color:P.txt2,maxWidth:460,margin:"0 auto 20px",lineHeight:1.65}}>Guardando tu evaluación…</p>
+        )}
+        {saveStatus==="ok"&&(
+          <p style={{fontSize:14,color:P.txt2,maxWidth:460,margin:"0 auto 20px",lineHeight:1.65}}>
+            Tu evaluación ha sido registrada. Si tu institución es seleccionada para el piloto <em>Inteligencia Circular en el Sector Salud</em>, nos estaremos comunicando contigo antes del 4 de noviembre.
+          </p>
+        )}
+        {saveStatus==="error"&&(
+          <div style={{background:"#FFF3F0",border:"1.5px solid #E09060",borderRadius:10,padding:"16px 18px",maxWidth:500,margin:"0 auto 20px",textAlign:"left"}}>
+            <p style={{fontSize:14,fontWeight:700,color:"#C04A20",margin:"0 0 6px"}}>No pudimos registrar tu evaluación</p>
+            <p style={{fontSize:13,color:P.txt,margin:"0 0 8px",lineHeight:1.55}}>
+              Tus resultados se calcularon, pero no logramos enviarlos. Puede deberse a una restricción de la red de tu institución. Puedes reintentar o escribirnos a <strong>info@w2wglobal.com</strong> con estos datos para registrarla manualmente:
+            </p>
+            <p style={{fontSize:12.5,color:P.txt,margin:"0 0 12px",lineHeight:1.55,background:P.white,borderRadius:8,padding:"8px 10px"}}>
+              {co.razonSocial} · NIT {co.nit} · Puntaje {score}/100 · Nivel {lv.name}
+            </p>
+            <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
+              <button onClick={()=>{setSaveStatus("saving");saveRecord(null, ans, aAns);}} style={{...css.btn,padding:"8px 16px",fontSize:13}}>Reintentar envío</button>
+              <a href={"mailto:info@w2wglobal.com?subject="+encodeURIComponent("Evaluación de madurez circular - "+co.razonSocial)+"&body="+encodeURIComponent("Institución: "+co.razonSocial+"\nNIT: "+co.nit+"\nPuntaje: "+score+"/100\nNivel: "+lv.name+"\nContacto: "+co.contactName+" - "+co.contactEmail)} style={{...css.btnO,padding:"8px 16px",fontSize:13,textDecoration:"none",display:"inline-block"}}>Enviar por correo</a>
+            </div>
+          </div>
+        )}
 
         <div style={{marginTop:20,paddingTop:14,borderTop:`1px solid ${P.border}`,display:"flex",flexDirection:"column",alignItems:"center",gap:6}}>
           <Logo/>
